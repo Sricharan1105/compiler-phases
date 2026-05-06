@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Compiler Phases — FJ3 Project</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --purple-50:  #EEEDFE; --purple-200: #AFA9EC; --purple-400: #7F77DD;
+      --purple-600: #534AB7; --purple-800: #3C3489; --purple-900: #26215C;
+      --blue-50:  #E6F1FB; --blue-400: #378ADD; --blue-800: #0C447C;
+      --green-50: #EAF3DE; --green-400: #639922; --green-800: #27500A;
+      --amber-50: #FAEEDA; --amber-400: #BA7517; --amber-800: #633806;
+      --coral-50: #FAECE7; --coral-600: #993C1D; --coral-800: #712B13;
+      --pink-50:  #FBEAF0; --pink-800: #72243E;
+      --gray-50:  #F1EFE8; --gray-200: #B4B2A9; --gray-400: #888780; --gray-800: #444441;
+      --red-50:   #FCEBEB; --red-600: #A32D2D;
+      --teal-50:  #E1F5EE; --teal-800: #085041;
+      --bg: #f8f8f6; --card: #ffffff; --border: rgba(0,0,0,0.12);
+      --text: #1a1a18; --muted: #666664; --hint: #999997;
+      --mono: 'Courier New', Courier, monospace;
+      --sans: 'Segoe UI', system-ui, sans-serif;
+      --radius: 10px; --radius-sm: 6px;
+    }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 0;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--purple-600);
+      color: #fff;
+      padding: 1.4rem 2rem 1rem;
+      display: flex; align-items: flex-end; gap: 1.5rem;
+      border-bottom: 3px solid var(--purple-800);
+    }
+    header h1 { font-size: 1.4rem; font-weight: 600; letter-spacing: -0.02em; }
+    header p  { font-size: 0.8rem; opacity: 0.7; margin-top: 2px; }
+    .badge {
+      background: var(--purple-800); color: var(--purple-200);
+      font-size: 10px; font-weight: 600; padding: 3px 8px;
+      border-radius: 99px; letter-spacing: 0.05em; margin-left: auto;
+      align-self: center;
+    }
+
+    /* ── LAYOUT ── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1.5rem 3rem; }
+
+    /* ── PIPELINE ── */
+    .pipeline {
+      display: flex; align-items: center; gap: 0;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden; margin-bottom: 1.2rem;
+    }
+    .pip { flex: 1; padding: 10px 4px; text-align: center; font-size: 10.5px;
+      font-weight: 600; cursor: pointer; border-right: 1px solid var(--border);
+      background: var(--card); color: var(--muted); transition: all 0.15s;
+      line-height: 1.35; }
+    .pip:last-child { border-right: none; }
+    .pip .num { display: block; font-size: 17px; font-weight: 700;
+      color: var(--purple-400); margin-bottom: 1px; }
+    .pip:hover  { background: var(--purple-50); color: var(--purple-600); }
+    .pip.active { background: var(--purple-600); color: #fff; }
+    .pip.active .num { color: var(--purple-200); }
+    .pip.done   { background: var(--green-50); color: var(--green-800); }
+    .pip.done .num { color: var(--green-400); }
+
+    /* ── PHASE DESC ── */
+    .phase-desc {
+      background: var(--purple-50); border: 1px solid var(--purple-200);
+      border-radius: var(--radius); padding: 0.9rem 1.2rem; margin-bottom: 1.2rem;
+    }
+    .phase-desc h3 { font-size: 14px; font-weight: 600; color: var(--purple-800); margin-bottom: 4px; }
+    .phase-desc p  { font-size: 13px; color: var(--purple-600); line-height: 1.6; }
+
+    /* ── CONTROLS ── */
+    .controls { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+
+    select {
+      padding: 7px 12px; font-size: 12.5px; font-family: var(--sans);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--card); color: var(--text); cursor: pointer;
+    }
+    select:focus { outline: 2px solid var(--purple-400); }
+
+    button {
+      padding: 8px 18px; font-size: 12.5px; font-family: var(--sans);
+      font-weight: 600; border-radius: var(--radius-sm); cursor: pointer; border: none;
+      transition: background 0.12s, transform 0.08s;
+    }
+    button:active { transform: scale(0.97); }
+    .btn-primary { background: var(--purple-600); color: #fff; }
+    .btn-primary:hover { background: var(--purple-800); }
+    .btn-all { background: var(--green-400); color: #fff; }
+    .btn-all:hover { background: var(--green-800); }
+    .btn-clear { background: var(--card); color: var(--muted);
+      border: 1px solid var(--border); }
+    .btn-clear:hover { background: var(--gray-50); }
+
+    /* ── PANELS ── */
+    .panels { display: flex; flex-direction: column; gap: 1rem; }
+
+    .panel {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem 1.2rem;
+    }
+    .panel-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--hint); margin-bottom: 8px;
+    }
+
+    textarea {
+      width: 100%; height: 180px; resize: vertical;
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      background: #fdfdfc; color: var(--text);
+    }
+    textarea:focus { outline: 2px solid var(--purple-400); }
+
+    .output-box {
+      min-height: 420px; max-height: 70vh; overflow-y: auto;
+      font-family: var(--sans); font-size: 12px; line-height: 1.5;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: #fdfdfc; color: var(--text);
+    }
+
+    /* ── PARSE TREE ── */
+    .tree-wrap { padding: 16px 10px; overflow-x: auto; }
+    .tree-root { display: flex; flex-direction: column; align-items: flex-start; }
+
+    .tree-node {
+      display: flex; flex-direction: column; align-items: flex-start;
+      margin: 2px 0;
+    }
+    .tree-row  { display: flex; align-items: center; gap: 0; }
+    .tree-indent { display: flex; align-items: stretch; }
+    .tree-line-v {
+      width: 18px; border-left: 2px solid #c5c2e8;
+      margin-left: 8px; flex-shrink: 0;
+    }
+    .tree-line-h {
+      width: 14px; border-top: 2px solid #c5c2e8;
+      align-self: center; flex-shrink: 0;
+    }
+    .tree-corner {
+      width: 18px; border-left: 2px solid #c5c2e8;
+      border-bottom: 2px solid #c5c2e8; border-bottom-left-radius: 4px;
+      margin-left: 8px; height: 14px; flex-shrink: 0; align-self: flex-start;
+      margin-top: 10px;
+    }
+    .tree-spacer { width: 18px; margin-left: 8px; flex-shrink:0; }
+
+    .tree-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px 3px 8px; border-radius: 6px;
+      font-size: 12px; font-weight: 600; white-space: nowrap;
+      border: 1.5px solid transparent; margin: 2px 0; cursor: default;
+      transition: opacity .1s;
+    }
+    .tree-chip:hover { opacity: .85; }
+    .tree-chip .chip-icon { font-size: 13px; }
+    .tree-chip .chip-val  { font-size: 10.5px; font-weight: 400; opacity: .75; margin-left: 2px; }
+
+    /* node colours by role */
+    .nc-root   { background:#EDE9FE; color:#4C1D95; border-color:#C4B5FD; }
+    .nc-func   { background:#DBEAFE; color:#1E3A8A; border-color:#93C5FD; }
+    .nc-decl   { background:#D1FAE5; color:#064E3B; border-color:#6EE7B7; }
+    .nc-ctrl   { background:#FEF3C7; color:#78350F; border-color:#FCD34D; }
+    .nc-call   { background:#FCE7F3; color:#831843; border-color:#F9A8D4; }
+    .nc-ret    { background:#FEE2E2; color:#7F1D1D; border-color:#FCA5A5; }
+    .nc-expr   { background:#F0FDF4; color:#14532D; border-color:#86EFAC; }
+    .nc-loop   { background:#FFF7ED; color:#7C2D12; border-color:#FDBA74; }
+
+    .tree-children { display: flex; flex-direction: column; }
+    .tree-legend {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding: 8px 16px 12px; border-top: 1px solid var(--border);
+    }
+    .leg-item {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 10.5px; color: var(--muted);
+    }
+    .leg-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+    /* ── Universal output table ── */
+    table.out-tbl {
+      width: 100%; border-collapse: collapse; font-size: 12px;
+    }
+    table.out-tbl thead tr {
+      background: var(--purple-600); color: #fff; position: sticky; top: 0; z-index: 1;
+    }
+    table.out-tbl thead th {
+      padding: 7px 10px; text-align: left; font-size: 10.5px;
+      font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+    table.out-tbl tbody tr:nth-child(even) { background: var(--gray-50); }
+    table.out-tbl tbody tr:hover { background: var(--purple-50); }
+    table.out-tbl tbody td {
+      padding: 6px 10px; border-bottom: 1px solid var(--border);
+      font-family: var(--mono); vertical-align: middle;
+    }
+    table.out-tbl tbody td.label-col {
+      font-family: var(--sans); font-weight: 600; color: var(--muted);
+      font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em;
+      white-space: nowrap;
+    }
+
+    /* token badge inside table */
+    .tk-badge {
+      display: inline-block; padding: 1px 7px; border-radius: 4px;
+      font-size: 11px; font-weight: 600;
+    }
+    .tk-keyword  { background: var(--purple-50);  color: var(--purple-800); }
+    .tk-number   { background: var(--green-50);   color: var(--green-800);  }
+    .tk-op       { background: var(--amber-50);   color: var(--amber-800);  }
+    .tk-paren    { background: var(--coral-50);   color: var(--coral-800);  }
+    .tk-ident    { background: var(--blue-50);    color: var(--blue-800);   }
+    .tk-str      { background: var(--pink-50);    color: var(--pink-800);   }
+    .tk-punct    { background: var(--gray-50);    color: var(--gray-800);   }
+
+    .ok  { color: var(--green-400); font-weight: 700; }
+    .err { color: var(--red-600);   font-weight: 700; }
+
+    .tbl-empty {
+      padding: 16px; text-align: center; color: var(--hint); font-size: 12px;
+      font-family: var(--sans);
+    }
+
+    /* ── INFO CARDS ── */
+    .info-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 1.2rem;
+    }
+    .info-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 0.9rem 1rem;
+    }
+    .info-card h4 { font-size: 12px; font-weight: 700; color: var(--purple-600); margin-bottom: 4px; }
+    .info-card p  { font-size: 11.5px; color: var(--muted); line-height: 1.55; }
+
+    @media (max-width: 700px) {
+      .panels { grid-template-columns: 1fr; }
+      .info-grid { grid-template-columns: 1fr; }
+      .pipeline { flex-wrap: wrap; }
+      .pip { min-width: 30%; border-radius: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Phases of a Compiler</h1>
+    <p>Interactive project file — FJ3 Components</p>
+  </div>
+  <span class="badge">C LANGUAGE</span>
+</header>
+
+<div class="container">
+
+  <!-- PIPELINE -->
+  <div class="pipeline">
+    <div class="pip active" onclick="setPhase(0)"><span class="num">1</span>Lexical<br>Analysis</div>
+    <div class="pip"        onclick="setPhase(1)"><span class="num">2</span>Syntax<br>Analysis</div>
+    <div class="pip"        onclick="setPhase(2)"><span class="num">3</span>Semantic<br>Analysis</div>
+    <div class="pip"        onclick="setPhase(3)"><span class="num">4</span>Intermediate<br>Code</div>
+    <div class="pip"        onclick="setPhase(4)"><span class="num">5</span>Code<br>Optimization</div>
+    <div class="pip"        onclick="setPhase(5)"><span class="num">6</span>Code<br>Generation</div>
+  </div>
+
+  <!-- PHASE DESC -->
+  <div class="phase-desc" id="phase-desc"></div>
+
+  <!-- CONTROLS -->
+  <div class="controls">
+    <select id="sample-select" onchange="loadSample()">
+      <option value="">— load sample program —</option>
+      <option value="0">1. Rectangle border (*)</option>
+      <option value="1">2. Multiplication table</option>
+      <option value="2">3. Triangle pattern (1 2 3…)</option>
+      <option value="3">4. Chessboard (W / B)</option>
+      <option value="4">5. Right triangle (*)</option>
+      <option value="5">8. Palindrome check</option>
+      <option value="6">9. While loop counter</option>
+      <option value="7">10. Sum of digits</option>
+      <option value="8">11. Reverse number</option>
+      <option value="9">13. Vowel / Consonant / Digit</option>
+      <option value="10">14. Largest of three</option>
+      <option value="11">15. Grade system</option>
+      <option value="12">17. Leap year check</option>
+      <option value="13">18. Positive / Negative Even / Odd</option>
+    </select>
+    <button class="btn-primary" onclick="runPhase()">▶ Run This Phase</button>
+    <button class="btn-all"     onclick="runAll()">⚡ Run All Phases</button>
+    <button class="btn-clear"   onclick="clearAll()">✕ Clear</button>
+  </div>
+
+  <!-- PANELS -->
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-label">Input — C source code</div>
+      <textarea id="code-input" placeholder="// Paste or load a C program...
+#include &lt;stdio.h&gt;
+int main() {
+    int x = 10;
+    printf(&quot;%d&quot;, x);
+    return 0;
+}"></textarea>
+    </div>
+    <div class="panel">
+      <div class="panel-label" id="output-label">Phase output</div>
+      <div class="output-box" id="output-box">
+        <div class="tbl-empty">Select a phase above and click ▶ Run This Phase.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INFO CARDS -->
+  <div class="info-grid">
+    <div class="info-card">
+      <h4>1. Lexical Analysis</h4>
+      <p>Converts source characters into a stream of tokens: keywords, identifiers, literals, operators, punctuation. Removes whitespace and comments.</p>
+    </div>
+    <div class="info-card">
+      <h4>2. Syntax Analysis</h4>
+      <p>Parses the token stream against the C grammar. Builds an Abstract Syntax Tree (AST) showing the hierarchical program structure.</p>
+    </div>
+    <div class="info-card">
+      <h4>3. Semantic Analysis</h4>
+      <p>Checks meaning: type correctness, scope rules, undeclared identifiers. Populates the Symbol Table with each variable's type and scope.</p>
+    </div>
+    <div class="info-card">
+      <h4>4. Intermediate Code</h4>
+      <p>Converts the AST into Three-Address Code (TAC) — a machine-independent IR that bridges high-level code and machine instructions.</p>
+    </div>
+    <div class="info-card">
+      <h4>5. Code Optimization</h4>
+      <p>Improves the IR: constant folding, dead code removal, loop optimisation. Same behaviour, fewer / faster instructions.</p>
+    </div>
+    <div class="info-card">
+      <h4>6. Code Generation</h4>
+      <p>Maps optimised IR to target assembly instructions. Handles register allocation and instruction selection for the final output.</p>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+/* ============================================================
+   SAMPLE PROGRAMS (from PDF)
+   ============================================================ */
+const samples = [
+`#include <stdio.h>
+int main() {
+  int i, j, n = 5;
+  for(i = 1; i <= n; i++) {
+    for(j = 1; j <= n; j++) {
+      if(i == 1 || i == n || j == 1 || j == n)
+        printf("* ");
+      else
+        printf("  ");
+    }
+    printf("\\n");
+  }
+  return 0;
+}`,
+`#include <stdio.h>
+int main() {
+  int i, j;
+  for(i = 1; i <= 5; i++) {
+    for(j = 1; j <= 5; j++) {
+      printf("%d ", i * j);
+    }
+    printf("\\n");
+  }
+  return 0;
+}`,
+`#include <stdio.h>
+int main() {
+  int i, j;
+  for(i = 1; i <= 5; i++) {
+    for(j = 1; j <= i; j++) {
+      printf("%d ", j);
+    }
+    printf("\\n");
+  }
+  printf("Pattern complete\\n");
+  return 0;
+}`,
+`#include <stdio.h>
+int main() {
+  int i, j;
+  for(i = 1; i <= 8; i++) {
+    for(j = 1; j <= 8; j++) {
+      if((i+j)%2==0) printf("W ");
+      else printf("B ");
+    }
+    printf("\\n");
+  }
+  return 0;
+}`,
+`#include <stdio.h>
+int main() {
+  int i, j;
+  for(i = 1; i <= 5; i++) {
+    for(j = 1; j <= i; j++) {
+      printf("* ");
+    }
+    printf("\\n");
+  }
+  return 0;
+}`,
+`#include <stdio.h>
+int main() {
+  int num = 121, temp, rev = 0, digit;
+  temp = num;
+  while(num != 0) {
+    digit = num % 10;
+    rev = rev * 10 + digit;
+    num = num / 10;
+  }
+  if(temp == rev)
+    printf("Palindrome\\n");
+  else
+    printf("Not Palindrome\\n");
+  return 0;
+}`,
+`#include <stdio.h>
+int main() {
+  int i = 1;
+  while(i <= 5) {
+    printf("Value: %d\\n", i);
+    i++;
+  }
+  printf("Loop ended\\n");
+  return 0;
+}`,
+`#include <stdio.h>
+int main() {
+  int num = 1234, sum = 0, digit;
+  while(num != 0) {
+    digit = num % 10;
+    sum = sum + digit;
+    num = num / 10;
+  }
+  printf("Sum of digits = %d\\n", sum);
+  return 0;
+}`,
+`#include <stdio.h>
+int main() {
+  int num = 1234, rev = 0, rem;
+  while(num != 0) {
+    rem = num % 10;
+    rev = rev * 10 + rem;
+    num /= 10;
+  }
+  printf("Reverse = %d", rev);
+  return 0;
+}`,
+`#include <stdio.h>
+int main() {
+  char ch = 'A';
+  if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) {
+    if(ch=='a'||ch=='e'||ch=='i'||ch=='o'||ch=='u'||
+       ch=='A'||ch=='E'||ch=='I'||ch=='O'||ch=='U')
+      printf("Vowel\\n");
+    else
+      printf("Consonant\\n");
+  } else if(ch >= '0' && ch <= '9') {
+    printf("Digit\\n");
+  } else {
+    printf("Special Character\\n");
+  }
+  return 0;
+}`,
+`#include <stdio.h>
+int main() {
+  int a = 10, b = 25, c = 15;
+  if(a > b && a > c) {
+    printf("Largest is a = %d\\n", a);
+  } else if(b > c) {
+    printf("Largest is b = %d\\n", b);
+  } else {
+    printf("Largest is c = %d\\n", c);
+  }
+  return 0;
+}`,
+`#include <stdio.h>
+int main() {
+  int marks = 75;
+  if(marks >= 90)
+    printf("Grade A");
+  else if(marks >= 75)
+    printf("Grade B");
+  else if(marks >= 50)
+    printf("Grade C");
+  else
+    printf("Fail");
+  return 0;
+}`,
+`#include <stdio.h>
+int main() {
+  int year = 2024;
+  if(year % 4 == 0) {
+    if(year % 100 == 0) {
+      if(year % 400 == 0)
+        printf("Leap Year\\n");
+      else
+        printf("Not Leap Year\\n");
+    } else {
+      printf("Leap Year\\n");
+    }
+  } else {
+    printf("Not Leap Year\\n");
+  }
+  return 0;
+}`,
+`#include <stdio.h>
+int main() {
+  int num = -4;
+  if(num > 0) {
+    if(num % 2 == 0)
+      printf("Positive Even\\n");
+    else
+      printf("Positive Odd\\n");
+  } else if(num < 0) {
+    if(num % 2 == 0)
+      printf("Negative Even\\n");
+    else
+      printf("Negative Odd\\n");
+  } else {
+    printf("Number is Zero\\n");
+  }
+  return 0;
+}`
+];
+
+/* ============================================================
+   PHASE METADATA
+   ============================================================ */
+const phases = [
+  { name: "Phase 1 — Lexical Analysis (Scanner / Tokenizer)",
+    desc: "The lexer reads raw source characters and groups them into tokens: keywords, identifiers, literals, operators, and punctuation. Whitespace and comments are stripped. Each token carries a type and value.",
+    outLabel: "Token stream" },
+  { name: "Phase 2 — Syntax Analysis (Parser / AST Builder)",
+    desc: "The parser takes the token stream and checks it against the C grammar rules. It builds an Abstract Syntax Tree (AST) — a tree that represents the hierarchical structure of declarations, statements, and expressions.",
+    outLabel: "Abstract Syntax Tree (AST)" },
+  { name: "Phase 3 — Semantic Analysis (Type Checker / Symbol Table)",
+    desc: "The semantic analyser traverses the AST and verifies meaning: checks for undeclared variables, type mismatches, and scope violations. It constructs the Symbol Table recording each identifier's type, scope, and initial value.",
+    outLabel: "Symbol table + semantic checks" },
+  { name: "Phase 4 — Intermediate Code Generation (TAC / IR)",
+    desc: "The compiler converts the AST into a machine-independent Intermediate Representation. Three-Address Code (TAC) uses at most three operands per instruction: result = operand1 op operand2. This IR bridges source and target.",
+    outLabel: "Three-Address Code (TAC)" },
+  { name: "Phase 5 — Code Optimization",
+    desc: "The optimizer analyses the IR and applies transformations: constant folding, dead code elimination, common sub-expression elimination, and strength reduction. The goal is fewer and faster instructions with identical behaviour.",
+    outLabel: "Optimized IR" },
+  { name: "Phase 6 — Code Generation (Target Assembly)",
+    desc: "The backend maps optimised IR to actual target machine instructions (x86-style assembly here). It performs register allocation, instruction selection, and emits the final assembly code ready for linking.",
+    outLabel: "x86-style assembly" }
+];
+
+let currentPhase = 0;
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function escH(s) {
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
+}
+
+const KEYWORDS = new Set([
+  'int','char','float','double','void','long','short','unsigned','signed',
+  'if','else','while','for','do','return','switch','case','break','continue',
+  'struct','typedef','include','define','printf','scanf','main','sizeof'
+]);
+
+function lex(code) {
+  const tokens = [];
+  let i = 0;
+  while (i < code.length) {
+    if (/\s/.test(code[i])) { i++; continue; }
+    // line comment
+    if (code[i]==='/' && code[i+1]==='/') {
+      let s=i; while(i<code.length && code[i]!=='\n') i++;
+      tokens.push({type:'comment', val:code.slice(s,i)}); continue;
+    }
+    // block comment
+    if (code[i]==='/' && code[i+1]==='*') {
+      let s=i; while(i<code.length && !(code[i]==='*'&&code[i+1]==='/')) i++;
+      i+=2; tokens.push({type:'comment', val:code.slice(s,i)}); continue;
+    }
+    // preprocessor
+    if (code[i]==='#') {
+      let s=i; while(i<code.length && code[i]!=='\n') i++;
+      tokens.push({type:'keyword', val:code.slice(s,i)}); continue;
+    }
+    // string literal
+    if (code[i]==='"') {
+      let s=i++; while(i<code.length && code[i]!=='"') { if(code[i]==='\\') i++; i++; } i++;
+      tokens.push({type:'str', val:code.slice(s,i)}); continue;
+    }
+    // char literal
+    if (code[i]==="'") {
+      let s=i++; while(i<code.length && code[i]!=="'") { if(code[i]==='\\') i++; i++; } i++;
+      tokens.push({type:'str', val:code.slice(s,i)}); continue;
+    }
+    // number
+    if (/[0-9]/.test(code[i])) {
+      let s=i; while(i<code.length && /[0-9.xXa-fA-F]/.test(code[i])) i++;
+      tokens.push({type:'number', val:code.slice(s,i)}); continue;
+    }
+    // identifier / keyword
+    if (/[a-zA-Z_]/.test(code[i])) {
+      let s=i; while(i<code.length && /[a-zA-Z0-9_]/.test(code[i])) i++;
+      const w = code.slice(s,i);
+      tokens.push({type: KEYWORDS.has(w)?'keyword':'ident', val:w}); continue;
+    }
+    // brackets/parens
+    if ('(){}[];,'.includes(code[i])) {
+      tokens.push({type:'paren', val:code[i]}); i++; continue;
+    }
+    // operators (2-char then 1-char)
+    if ('+-*/%=<>!&|^~'.includes(code[i])) {
+      let s=i;
+      if(i+1<code.length && '+-<>=!&|'.includes(code[i]) && '+-<>=!&|'.includes(code[i+1])) i++;
+      i++; tokens.push({type:'op', val:code.slice(s,i)}); continue;
+    }
+    tokens.push({type:'punct', val:code[i]}); i++;
+  }
+  return tokens;
+}
+
+/* ── Phase renderers — all table format ── */
+
+function makeTable(headers, rows, emptyMsg) {
+  if (!rows.length)
+    return `<div class="tbl-empty">${emptyMsg || 'No data.'}</div>`;
+  let h = `<table class="out-tbl"><thead><tr>`;
+  headers.forEach(hd => h += `<th>${hd}</th>`);
+  h += `</tr></thead><tbody>`;
+  rows.forEach(r => {
+    h += '<tr>';
+    r.forEach((cell, ci) => h += `<td${ci===0?' class="label-col"':''}>${cell}</td>`);
+    h += '</tr>';
+  });
+  h += '</tbody></table>';
+  return h;
+}
+
+function renderTokens(tokens) {
+  const typeMap = {keyword:'tk-keyword',number:'tk-number',op:'tk-op',
+                   paren:'tk-paren',ident:'tk-ident',str:'tk-str',
+                   punct:'tk-punct'};
+  const filtered = tokens.filter(t => t.type !== 'comment');
+  if (!filtered.length) return `<div class="tbl-empty err">No tokens found.</div>`;
+
+  const rows = filtered.map((t, i) => [
+    i + 1,
+    `<span class="tk-badge ${typeMap[t.type]||'tk-punct'}">${escH(t.val)}</span>`,
+    t.type.toUpperCase(),
+    describeToken(t)
+  ]);
+  return makeTable(['#', 'Token', 'Type', 'Description'], rows);
+}
+
+function describeToken(t) {
+  const kw = ['int','char','float','double','void','long','short','unsigned','signed'];
+  const ctrl = ['if','else','while','for','do','return','switch','case','break','continue'];
+  const lib  = ['printf','scanf','main','include','define','sizeof','struct','typedef'];
+  if (t.type==='keyword') {
+    if (kw.includes(t.val))   return 'Data type keyword';
+    if (ctrl.includes(t.val)) return 'Control flow keyword';
+    if (lib.includes(t.val))  return 'Library / built-in';
+    return 'Preprocessor directive';
+  }
+  if (t.type==='ident')  return 'User-defined identifier (variable / function)';
+  if (t.type==='number') return 'Integer / numeric literal';
+  if (t.type==='str')    return 'String or character literal';
+  if (t.type==='op') {
+    const arith = ['+','-','*','/','%']; const rel = ['<','>','<=','>=','==','!='];
+    const asgn  = ['=','+=','-=','*=','/=']; const log = ['&&','||','!','++','--'];
+    if (arith.includes(t.val)) return 'Arithmetic operator';
+    if (rel.includes(t.val))   return 'Relational operator';
+    if (asgn.includes(t.val))  return 'Assignment operator';
+    if (log.includes(t.val))   return 'Logical / unary operator';
+    return 'Operator';
+  }
+  if (t.type==='paren') {
+    const m = {'(':'Open parenthesis',')':'Close parenthesis',
+                '{':'Open brace','}':'Close brace',
+                '[':'Open bracket',']':'Close bracket',
+                ';':'Statement terminator',',':'Comma separator'};
+    return m[t.val] || 'Delimiter';
+  }
+  return 'Punctuation';
+}
+
+function renderAST(tokens) {
+  const rel = tokens.filter(t => t.type !== 'comment');
+  const typeKws = new Set(['int','char','float','double','void','long','short']);
+
+  /* Build tree data structure */
+  const root = {
+    label:'TranslationUnit', cls:'nc-root', icon:'📦', val:'program',
+    children:[{
+      label:'FunctionDecl', cls:'nc-func', icon:'⚙️', val:'main() → int',
+      children: buildChildren(rel, typeKws)
+    }]
+  };
+
+  function buildChildren(toks, typeKws) {
+    const ch = [];
+    for (let i=0; i<toks.length; i++) {
+      const t = toks[i];
+      if (t.type==='keyword' && typeKws.has(t.val)) {
+        const n1=toks[i+1], n2=toks[i+2], n3=toks[i+3];
+        if (n1 && n1.type==='ident' && n2 && n2.val!=='(') {
+          const initVal = n2&&n2.val==='='&&n3 ? n3.val : '?';
+          ch.push({label:'VarDecl', cls:'nc-decl', icon:'📌',
+            val:`${n1.val} : ${t.val} = ${escH(initVal)}`,
+            children:[]});
+        }
+      }
+      if (t.type==='keyword' && t.val==='for') {
+        /* find inner stmts */
+        const inner = collectInner(toks, i);
+        ch.push({label:'ForStmt', cls:'nc-loop', icon:'🔁',
+          val:'init ; cond ; incr',
+          children:[
+            {label:'InitExpr', cls:'nc-expr', icon:'▶', val:'i = 1', children:[]},
+            {label:'CondExpr', cls:'nc-expr', icon:'?', val:'i ≤ n', children:[]},
+            {label:'IncrExpr', cls:'nc-expr', icon:'↑', val:'i++', children:[]},
+            {label:'CompoundStmt', cls:'nc-ctrl', icon:'{ }', val:'loop body', children: inner}
+          ]});
+      }
+      if (t.type==='keyword' && t.val==='while') {
+        ch.push({label:'WhileStmt', cls:'nc-loop', icon:'🔄',
+          val:'condition',
+          children:[
+            {label:'CondExpr', cls:'nc-expr', icon:'?', val:'condition expr', children:[]},
+            {label:'CompoundStmt', cls:'nc-ctrl', icon:'{ }', val:'loop body', children:[]}
+          ]});
+      }
+      if (t.type==='keyword' && t.val==='if') {
+        const hasElse = toks.slice(i).some(x=>x.val==='else');
+        const ifChildren = [
+          {label:'CondExpr', cls:'nc-expr', icon:'?', val:'condition expr', children:[]},
+          {label:'ThenBlock', cls:'nc-ctrl', icon:'✓', val:'then branch', children:[]}
+        ];
+        if (hasElse) ifChildren.push({label:'ElseBlock', cls:'nc-ctrl', icon:'✗', val:'else branch', children:[]});
+        ch.push({label:'IfStmt', cls:'nc-ctrl', icon:'🔀', val: hasElse?'if / else':'if',
+          children: ifChildren});
+      }
+      if (t.type==='keyword' && t.val==='printf') {
+        const strTok = toks.slice(i).find(x=>x.type==='str');
+        ch.push({label:'CallExpr', cls:'nc-call', icon:'📣',
+          val:`printf( ${strTok ? escH(strTok.val) : '...'} )`,
+          children:[
+            {label:'FuncRef', cls:'nc-expr', icon:'fn', val:'printf', children:[]},
+            {label:'ArgList', cls:'nc-expr', icon:'⟨⟩', val:'format, args...', children:[]}
+          ]});
+      }
+      if (t.type==='keyword' && t.val==='scanf') {
+        ch.push({label:'CallExpr', cls:'nc-call', icon:'📥',
+          val:'scanf( format, &var )',
+          children:[]});
+      }
+      if (t.type==='keyword' && t.val==='return') {
+        const nxt = toks[i+1];
+        ch.push({label:'ReturnStmt', cls:'nc-ret', icon:'⬅',
+          val: nxt ? escH(nxt.val) : 'void', children:[]});
+      }
+    }
+    return ch;
+  }
+
+  function collectInner(toks, startIdx) {
+    /* simplified: collect printf/if inside the for body */
+    const inner = [];
+    for (let j=startIdx+1; j<Math.min(startIdx+20, toks.length); j++) {
+      if (toks[j].val==='printf') {
+        const s = toks.slice(j).find(x=>x.type==='str');
+        inner.push({label:'CallExpr', cls:'nc-call', icon:'📣',
+          val:`printf(${s?escH(s.val):'...'})`, children:[]});
+      }
+      if (toks[j].val==='if')
+        inner.push({label:'IfStmt', cls:'nc-ctrl', icon:'🔀', val:'inner condition', children:[]});
+    }
+    return inner;
+  }
+
+  /* Render tree as HTML */
+  function renderNode(node, depth, isLast, prefixParts) {
+    let html = `<div class="tree-node">`;
+    // row with prefix lines
+    html += `<div class="tree-row">`;
+    prefixParts.forEach((p, pi) => {
+      if (p === 'pipe')  html += `<div class="tree-line-v" style="height:100%"></div>`;
+      if (p === 'space') html += `<div class="tree-spacer"></div>`;
+    });
+    if (depth > 0) {
+      html += isLast
+        ? `<div class="tree-corner"></div>`
+        : `<div class="tree-line-v" style="height:14px;margin-top:10px"></div>`;
+      html += `<div class="tree-line-h"></div>`;
+    }
+    html += `<span class="tree-chip ${node.cls}">
+      <span class="chip-icon">${node.icon}</span>
+      <b>${node.label}</b>
+      <span class="chip-val">${node.val}</span>
+    </span>`;
+    html += `</div>`; // end tree-row
+
+    if (node.children && node.children.length) {
+      html += `<div class="tree-children" style="margin-left:${depth===0?8:26+(depth*18)}px">`;
+      node.children.forEach((child, ci) => {
+        const childIsLast = ci === node.children.length - 1;
+        html += renderNode(child, depth+1, childIsLast, []);
+      });
+      html += `</div>`;
+    }
+    html += `</div>`;
+    return html;
+  }
+
+  const legend = [
+    {cls:'nc-root',  color:'#EDE9FE', label:'Program Root'},
+    {cls:'nc-func',  color:'#DBEAFE', label:'Function'},
+    {cls:'nc-decl',  color:'#D1FAE5', label:'Declaration'},
+    {cls:'nc-loop',  color:'#FFF7ED', label:'Loop'},
+    {cls:'nc-ctrl',  color:'#FEF3C7', label:'Control Flow'},
+    {cls:'nc-call',  color:'#FCE7F3', label:'Function Call'},
+    {cls:'nc-expr',  color:'#F0FDF4', label:'Expression'},
+    {cls:'nc-ret',   color:'#FEE2E2', label:'Return'},
+  ];
+
+  let legHtml = legend.map(l =>
+    `<span class="leg-item">
+      <span class="leg-dot" style="background:${l.color}"></span>${l.label}
+    </span>`
+  ).join('');
+
+  return `
+    <div class="tree-wrap">
+      <div style="font-size:11px;color:#888;margin-bottom:12px;font-family:var(--sans)">
+        Abstract Syntax Tree — parse tree visualization (hover nodes to highlight)
+      </div>
+      <div class="tree-root">${renderNode(root, 0, true, [])}</div>
+    </div>
+    <div class="tree-legend">${legHtml}</div>
+  `;
+}
+
+function renderSemantic(tokens) {
+  const syms = [];
+  const seen = new Set();
+  const typeKws = new Set(['int','char','float','double','void','long','short']);
+  for (let i=0; i<tokens.length; i++) {
+    const t = tokens[i];
+    if (t.type==='keyword' && typeKws.has(t.val)) {
+      const n1 = tokens[i+1];
+      if (n1 && n1.type==='ident' && !seen.has(n1.val)) {
+        seen.add(n1.val);
+        const hasEq = tokens[i+2] && tokens[i+2].val==='=';
+        const init  = hasEq && tokens[i+3] ? tokens[i+3].val : '—';
+        syms.push({name: n1.val, type: t.val, scope:'function', init});
+      }
+    }
+  }
+  if (!syms.length)
+    return `<div class="tbl-empty err">⚠ No variable declarations detected.</div>`;
+
+  const rows = syms.map((s, i) => [
+    i + 1,
+    `<span style="color:#378ADD;font-weight:700">${s.name}</span>`,
+    `<span style="color:#534AB7">${s.type}</span>`,
+    s.scope,
+    `<span style="color:#BA7517">${escH(s.init)}</span>`,
+    `<span class="ok">✓ declared</span>`,
+    sizeOf(s.type)
+  ]);
+  return makeTable(['#','Name','Data Type','Scope','Init Value','Status','Size (bytes)'], rows);
+}
+
+function sizeOf(type) {
+  return {int:'4',char:'1',float:'4',double:'8',long:'8',short:'2',void:'0'}[type] || '?';
+}
+
+function renderTAC(tokens) {
+  const rows = [];
+  let tmp = 1, lbl = 1;
+  const typeKws = new Set(['int','char','float','double']);
+
+  for (let i=0; i<tokens.length; i++) {
+    const t = tokens[i];
+    if (t.type==='keyword' && typeKws.has(t.val)) {
+      const n1 = tokens[i+1];
+      if (n1 && n1.type==='ident') {
+        const hasEq = tokens[i+2] && tokens[i+2].val==='=';
+        if (hasEq && tokens[i+3]) {
+          rows.push([rows.length+1, `${n1.val}`, '=', escH(tokens[i+3].val), 'Variable init (assignment)']);
+        } else {
+          rows.push([rows.length+1, `${n1.val}`, '=', '?', 'Variable declared (uninitialized)']);
+        }
+      }
+    }
+    if (t.type==='keyword' && t.val==='for') {
+      rows.push([rows.length+1, `L${lbl}:`, '—', '—', 'Loop start label']);
+      rows.push([rows.length+1, `if_false`, 'cond', `goto L${lbl+1}`, 'Loop condition check']);
+      rows.push([rows.length+1, `t${tmp}`, '=', 'loop body', 'Loop body execution']);
+      rows.push([rows.length+1, `goto`, `L${lbl}`, '—', 'Jump back to loop start']);
+      rows.push([rows.length+1, `L${lbl+1}:`, '—', '—', 'Loop exit label']);
+      lbl+=2; tmp++;
+    }
+    if (t.type==='keyword' && t.val==='while') {
+      rows.push([rows.length+1, `L${lbl}:`, '—', '—', 'While loop start label']);
+      rows.push([rows.length+1, `if_false`, 'cond', `goto L${lbl+1}`, 'While condition check']);
+      rows.push([rows.length+1, `t${tmp}`, '=', 'loop body', 'Loop body']);
+      rows.push([rows.length+1, `goto`, `L${lbl}`, '—', 'Back-edge jump']);
+      rows.push([rows.length+1, `L${lbl+1}:`, '—', '—', 'While exit label']);
+      lbl+=2; tmp++;
+    }
+    if (t.type==='keyword' && t.val==='if') {
+      rows.push([rows.length+1, `t${tmp}`, '=', 'eval condition', 'Compute condition result']);
+      rows.push([rows.length+1, `if_false`, `t${tmp}`, `goto L${lbl}`, 'Branch if condition false']);
+      rows.push([rows.length+1, '...', '—', '—', 'Then block']);
+      rows.push([rows.length+1, `goto`, `L${lbl+1}`, '—', 'Skip else block']);
+      rows.push([rows.length+1, `L${lbl}:`, '—', '—', 'Else label']);
+      rows.push([rows.length+1, `L${lbl+1}:`, '—', '—', 'Merge label']);
+      lbl+=2; tmp++;
+    }
+    if (t.type==='keyword' && t.val==='printf') {
+      const str = tokens.slice(i).find(x => x.type==='str');
+      rows.push([rows.length+1, 'param', str ? escH(str.val) : '...', '—', 'Push printf argument']);
+      rows.push([rows.length+1, 'call', 'printf', '—', 'Library function call']);
+    }
+    if (t.type==='keyword' && t.val==='return') {
+      const nxt = tokens[i+1];
+      rows.push([rows.length+1, 'return', nxt ? escH(nxt.val) : '—', '—', 'Function return']);
+    }
+  }
+  if (!rows.length)
+    return `<div class="tbl-empty err">Could not extract TAC — ensure code has statements.</div>`;
+  return makeTable(['Step', 'Result / Label', 'Operand 1', 'Operand 2', 'Description'], rows);
+}
+
+function renderOpt(tokens) {
+  const has = (kw) => tokens.some(t => t.val === kw);
+  const opts = [
+    { label:'Constant Folding',    check: tokens.some(t => t.type==='number'),
+      before:'t1 = 5 + 3', after:'t1 = 8', technique:'Evaluate constant exprs at compile time', gain:'Eliminates runtime addition' },
+    { label:'Dead Code Elimination', check: has('return'),
+      before:'x = 0; return x; y = 5', after:'x = 0; return x', technique:'Remove unreachable statements after return', gain:'Reduces code size' },
+    { label:'Strength Reduction',  check: tokens.some(t => t.val==='*' || t.val==='%'),
+      before:'x = x * 2', after:'x = x &lt;&lt; 1', technique:'Replace costly ops with cheaper equivalents', gain:'Shift instead of multiply' },
+    { label:'Common Sub-Expr.',    check: tokens.some(t => t.val==='%'),
+      before:'t1=i+j%2; t2=i+j%2', after:'t1=i+j%2; t2=t1', technique:'Reuse previously computed results', gain:'Avoids redundant computation' },
+    { label:'Loop Invariant Hoisting', check: has('for') || has('while'),
+      before:'for(…){ t = n*2 }', after:'t=n*2; for(…){ use t }', technique:'Move loop-invariant code outside loop', gain:'Reduces instructions per iteration' },
+  ];
+
+  const rows = opts.filter(o => o.check).map((o, i) => [
+    i+1,
+    `<span style="color:#534AB7;font-weight:700">${o.label}</span>`,
+    `<code style="color:#993C1D">${o.before}</code>`,
+    `<code style="color:#27500A">${o.after}</code>`,
+    o.technique,
+    `<span class="ok">${o.gain}</span>`
+  ]);
+
+  if (!rows.length)
+    return `<div class="tbl-empty">No applicable optimizations detected for this snippet.</div>`;
+  return makeTable(['#','Optimization','Before','After','Technique','Benefit'], rows);
+}
+
+function renderCodeGen(tokens) {
+  const rows = [];
+  const typeKws = new Set(['int','char','float','double']);
+
+  rows.push(['—', 'section .data', '—', 'Data segment declaration']);
+  for (let i=0; i<tokens.length; i++) {
+    const t = tokens[i];
+    if (t.type==='keyword' && typeKws.has(t.val)) {
+      const n1 = tokens[i+1];
+      if (n1 && n1.type==='ident') {
+        const hasEq = tokens[i+2] && tokens[i+2].val==='=';
+        const init  = hasEq && tokens[i+3] ? tokens[i+3].val : '0';
+        rows.push([`${n1.val}`, `dd ${escH(init)}`, t.val, `${t.val} variable → 4-byte storage`]);
+      }
+    }
+  }
+
+  rows.push(['—', 'section .text', '—', 'Code segment declaration']);
+  rows.push(['—', 'global main', '—', 'Export main symbol']);
+  rows.push(['main:', '—', '—', 'Function entry point label']);
+  rows.push(['push', 'ebp', '—', 'Save base pointer (stack frame)']);
+  rows.push(['mov', 'ebp, esp', '—', 'Set up new stack frame']);
+
+  let hasFor = false, hasWhile = false, hasPrintf = false, hasIf = false;
+  tokens.forEach(t => {
+    if (t.val==='for')    hasFor = true;
+    if (t.val==='while')  hasWhile = true;
+    if (t.val==='printf') hasPrintf = true;
+    if (t.val==='if')     hasIf = true;
+  });
+
+  if (hasFor || hasWhile) {
+    rows.push(['mov', 'ecx, 1', '—', 'Initialize loop counter register']);
+    rows.push(['.loop:', '—', '—', 'Loop top label']);
+    rows.push(['cmp', 'ecx, limit', '—', 'Compare counter vs limit']);
+    rows.push(['jg', '.end_loop', '—', 'Jump if counter exceeds limit']);
+    rows.push(['inc', 'ecx', '—', 'Increment loop counter']);
+    rows.push(['jmp', '.loop', '—', 'Unconditional back-edge jump']);
+    rows.push(['.end_loop:', '—', '—', 'Loop exit label']);
+  }
+  if (hasIf) {
+    rows.push(['cmp', 'eax, ebx', '—', 'Compare two operands for if-condition']);
+    rows.push(['jl', '.else_branch', '—', 'Jump to else if condition false']);
+    rows.push(['.else_branch:', '—', '—', 'Else block label']);
+  }
+  if (hasPrintf) {
+    rows.push(['push', 'format_str', '—', 'Push format string arg onto stack']);
+    rows.push(['call', 'printf', '—', 'Call C library printf function']);
+    rows.push(['add', 'esp, 4', '—', 'Clean up stack after call']);
+  }
+  rows.push(['xor', 'eax, eax', '—', 'Set return value = 0']);
+  rows.push(['pop', 'ebp', '—', 'Restore caller base pointer']);
+  rows.push(['ret', '—', '—', 'Return to OS / caller']);
+
+  return makeTable(['Instruction', 'Operand(s)', 'Register/Type', 'Description'], rows);
+}
+
+/* ============================================================
+   MAIN ACTIONS
+   ============================================================ */
+function setPhase(n) {
+  currentPhase = n;
+  document.querySelectorAll('.pip').forEach((p,i) => {
+    p.className = 'pip' + (i===n ? ' active' : (i<n ? ' done' : ''));
+  });
+  const ph = phases[n];
+  document.getElementById('phase-desc').innerHTML =
+    `<h3>${ph.name}</h3><p>${ph.desc}</p>`;
+  document.getElementById('output-label').textContent = `Phase ${n+1} output — ${ph.outLabel}`;
+}
+
+function loadSample() {
+  const v = document.getElementById('sample-select').value;
+  if (v === '') return;
+  document.getElementById('code-input').value = samples[parseInt(v)];
+}
+
+function getCode() { return document.getElementById('code-input').value.trim(); }
+
+function runPhase() {
+  const code = getCode();
+  if (!code) {
+    document.getElementById('output-box').innerHTML =
+      '<span class="err">⚠ Please enter or load a C program first.</span>';
+    return;
+  }
+  const tokens = lex(code);
+  let html = '';
+  switch(currentPhase) {
+    case 0: html = renderTokens(tokens);   break;
+    case 1: html = renderAST(tokens);      break;
+    case 2: html = renderSemantic(tokens); break;
+    case 3: html = renderTAC(tokens);      break;
+    case 4: html = renderOpt(tokens);      break;
+    case 5: html = renderCodeGen(tokens);  break;
+  }
+  document.getElementById('output-box').innerHTML = html;
+}
+
+function runAll() {
+  const code = getCode();
+  if (!code) {
+    document.getElementById('output-box').innerHTML =
+      '<div class="tbl-empty err">⚠ Please enter or load a C program first.</div>';
+    return;
+  }
+  const tokens = lex(code);
+  const renderers = [renderTokens, renderAST, renderSemantic, renderTAC, renderOpt, renderCodeGen];
+  const labels = phases.map(p => p.outLabel);
+  let html = '';
+  renderers.forEach((fn, i) => {
+    html += `<div style="margin-bottom:0">
+      <div style="background:var(--purple-800);color:#fff;font-size:10px;font-weight:700;
+                  letter-spacing:.07em;text-transform:uppercase;padding:5px 10px;">
+        Phase ${i+1} — ${labels[i]}
+      </div>
+      ${fn(tokens)}
+    </div>`;
+  });
+  document.getElementById('output-box').innerHTML = html;
+  document.querySelectorAll('.pip').forEach(p => p.className = 'pip done');
+  document.getElementById('output-label').textContent = 'All 6 phases — table view';
+}
+
+function clearAll() {
+  document.getElementById('code-input').value = '';
+  document.getElementById('output-box').innerHTML =
+    '<div class="tbl-empty">Cleared. Load a sample or paste your own code.</div>';
+  document.getElementById('sample-select').value = '';
+  document.querySelectorAll('.pip').forEach((p,i) => p.className = 'pip' + (i===0?' active':''));
+}
+
+/* ── Init ── */
+setPhase(0);
+</script>
+</body>
+</html>
